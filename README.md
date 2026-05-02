@@ -1,5 +1,7 @@
 # svelte-query-builder
 
+**DO NOT EXPECT MUCH FROM THIS THIS IS CLAUDE-WRITTEN AS AN EXPERIMENT**.
+
 A Svelte 5 port of [react-querybuilder](https://react-querybuilder.js.org/), powered by [shadcn-svelte](https://shadcn-svelte.com/) and [bits-ui](https://www.bits-ui.com/). Builds visual rule trees and exports them to **23 formats** (SQL, parameterized SQL, MongoDB, JSON Logic, CEL, SpEL, JSONata, Elasticsearch, Cypher, GraphQL, SPARQL, Gremlin, LDAP, Drizzle, Prisma, Sequelize, natural language, and more) by reusing `@react-querybuilder/core` directly — so format and parser behavior is **byte-identical** to the React library.
 
 ```svelte
