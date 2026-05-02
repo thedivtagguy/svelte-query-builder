@@ -1,0 +1,516 @@
+<script>
+	import Intro from './demos/Intro.svelte';
+	import Formats from './demos/Formats.svelte';
+	import CustomEditor from './demos/CustomEditor.svelte';
+	import Snippets from './demos/Snippets.svelte';
+	import Theming from './demos/Theming.svelte';
+	import InlineCombinators from './demos/InlineCombinators.svelte';
+	import LockMute from './demos/LockMute.svelte';
+	import Validation from './demos/Validation.svelte';
+	import ValueSources from './demos/ValueSources.svelte';
+	import Match from './demos/Match.svelte';
+	import Between from './demos/Between.svelte';
+	import Dnd from './demos/Dnd.svelte';
+	import Headless from './demos/Headless.svelte';
+</script>
+
+<section id="intro">
+
+<p class="eyebrow">Documentation</p>
+
+# Build a visual filter, get back queryable code.
+
+<div class="lede">
+
+This library renders the rule tree your users edit, then converts that tree to SQL,
+MongoDB, or any of 21 other formats. The whole thing is one Svelte component plus a few
+helper functions. Everything on this page is a live demo. Click around, then copy the
+code.
+
+</div>
+
+<Intro />
+
+</section>
+
+<section id="install">
+
+## Install
+
+The library ships as a single package. Run this in your project root.
+
+```bash
+pnpm add svelte-query-builder
+```
+
+<div class="muted small">
+
+Internally it uses `@react-querybuilder/core` for format and parser logic. You do not need
+to install that package yourself. The library expects Svelte 5 and works in SvelteKit or
+any Vite based Svelte setup.
+
+</div>
+
+</section>
+
+<section id="first">
+
+## Your first builder
+
+The component takes two things: the list of fields the user can pick from, and the query
+they are editing. Use `bind:query` so changes inside the builder flow back to your variable.
+
+```svelte
+<script lang="ts">
+  import { QueryBuilder, formatQuery } from 'svelte-query-builder';
+  import type { Field, RuleGroupType } from 'svelte-query-builder';
+
+  const fields: Field[] = [
+    { name: 'firstName', label: 'First name' },
+    { name: 'age', label: 'Age', inputType: 'number' },
+  ];
+
+  let query = $state<RuleGroupType>({ combinator: 'and', rules: [] });
+</script>
+
+<QueryBuilder bind:query {fields} />
+
+<pre>{formatQuery(query, 'sql')}</pre>
+```
+
+Result: every change the user makes triggers a re-render of your `formatQuery` call, so
+the SQL string stays in sync.
+
+</section>
+
+<section id="fields">
+
+## Defining fields
+
+Each entry in the `fields` array describes one column the user can filter on. The shape is
+small. Most apps only ever set `name` and `label`. The rest is optional and lets you control
+how the value editor renders for that field.
+
+```ts
+const fields: Field[] = [
+  // Plain text
+  { name: 'firstName', label: 'First name' },
+
+  // Number
+  { name: 'age', label: 'Age', inputType: 'number' },
+
+  // Boolean checkbox
+  { name: 'active', label: 'Active', valueEditorType: 'checkbox', defaultValue: false },
+
+  // Select with fixed options
+  {
+    name: 'instrument',
+    label: 'Instrument',
+    valueEditorType: 'select',
+    values: [
+      { name: 'Guitar', label: 'Guitar' },
+      { name: 'Piano',  label: 'Piano'  },
+    ],
+  },
+
+  // Date that can be compared to another date field
+  {
+    name: 'startDate',
+    label: 'Start',
+    inputType: 'date',
+    valueSources: ['value', 'field'],
+  },
+
+  // Array column with match modes (all / some / none / atLeast / atMost / exactly)
+  { name: 'phones', label: 'Phone numbers', matchModes: true },
+];
+```
+
+</section>
+
+<section id="props">
+
+## Component options
+
+These are the props you pass to `<QueryBuilder>`. None are required apart from one of
+`query`, `bind:query`, or `defaultQuery`.
+
+| Prop | Type | Description |
+| --- | --- | --- |
+| `query` | `RuleGroupType` | Controlled query value. Use with `onQueryChange` or `bind:query`. |
+| `defaultQuery` | `RuleGroupType` | Initial query when running uncontrolled. Internal state takes over after that. |
+| `onQueryChange` | `(q) => void` | Fires after every change made inside the builder. |
+| `fields` | `Field[]` | The columns the user can pick from. |
+| `independentCombinators` | `boolean` | Switches to the layout where AND or OR sits between rules instead of on the group. |
+| `showNotToggle` | `boolean` | Adds a NOT toggle on each group. |
+| `showCloneButtons` | `boolean` | Adds a button that duplicates a rule or group. |
+| `showShiftActions` | `boolean` | Adds up and down arrows that move a rule within its group. |
+| `showLockButtons` | `boolean` | Adds a lock toggle. Locked rules cannot be edited. |
+| `showMuteButtons` | `boolean` | Adds a mute toggle. Muted rules stay in the tree but are skipped by `formatQuery`. |
+| `enableDragAndDrop` | `boolean` | Lets the user reorder rules and groups by dragging them. |
+| `validator` | `(q) => ValidationMap` | Decides which rules are valid. Invalid rules get a CSS class you can target. |
+| `controls` | `Partial<Controls>` | Replace any built in subcomponent with your own. |
+| `controlClassnames` | `Partial<Classnames>` | Add CSS classes to specific parts of the UI. |
+| `translations` | `Partial<Translations>` | Override built in labels and titles. |
+
+</section>
+
+<section id="formats">
+
+## Output formats
+
+`formatQuery` takes the same query the user is editing and returns a string, object, or
+pair of values depending on the format you ask for. Pick a format below to see the live
+output for the query above.
+
+<Formats />
+
+<div class="muted small">
+
+Need a Postgres or MySQL flavour? Pass `{ preset: 'postgresql' }` as the third argument
+to `formatQuery`. The full set of presets is sqlite, postgresql, mysql, mssql, oracle,
+and ansi.
+
+</div>
+
+</section>
+
+<section id="duckdb">
+
+## Use with DuckDB or any database
+
+When you want to run the query against a real database, ask for the parameterized format.
+You get back a SQL string with placeholders and a separate array of values. Hand both to a
+prepared statement.
+
+```ts
+import { formatQuery } from 'svelte-query-builder';
+
+$effect(() => {
+  const { sql, params } = formatQuery(query, 'parameterized');
+  void run(sql, params);
+});
+
+async function run(where: string, params: unknown[]) {
+  const stmt = await connection.prepare(`SELECT * FROM users WHERE ${where}`);
+  results = await stmt.query(...params);
+}
+```
+
+<div class="muted small">
+
+Always use a parameterized format when feeding a real database. Never paste the result of
+`formatQuery(q, 'sql')` directly into a query string. The plain SQL output is for display.
+
+</div>
+
+</section>
+
+<section id="controls">
+
+## Custom value editors
+
+The default value editor handles text, numbers, dates, checkboxes, switches, and selects.
+When you need something else, write your own Svelte component and pass it through the
+`controls` prop. The builder gives it the rule, the current value, and a function to call
+when the value changes.
+
+<CustomEditor />
+
+```svelte
+<script lang="ts">
+  import { Input } from '$lib/components/ui/input/index.js';
+  import type { ValueEditorProps } from 'svelte-query-builder';
+
+  let { value, onChange, disabled }: ValueEditorProps = $props();
+</script>
+
+<Input
+  type="text"
+  {disabled}
+  value={value == null ? '' : String(value)}
+  oninput={(e) => onChange(e.currentTarget.value.toUpperCase())}
+/>
+```
+
+Slots you can override include `valueEditor`, `valueSelector`, `fieldSelector`,
+`operatorSelector`, `combinatorSelector`, `notToggle`, `shiftActions`, `matchModeEditor`,
+`dragHandle`, plus all the action buttons (add rule, add group, remove, clone, lock,
+mute). Set a slot to `null` to hide it entirely.
+
+</section>
+
+<section id="snippets">
+
+## Layout slots
+
+When you want to add UI above or below the rule tree without rebuilding anything, use the
+`header` and `footer` snippets. They receive the same schema and query the builder is
+using internally.
+
+<Snippets />
+
+```svelte
+<QueryBuilder bind:query {fields}>
+  {#snippet header({ schema })}
+    <div>{schema.fields.length} fields available</div>
+  {/snippet}
+  {#snippet footer({ query })}
+    <pre>{formatQuery(query, 'sql')}</pre>
+  {/snippet}
+</QueryBuilder>
+```
+
+</section>
+
+<section id="theming">
+
+## Theming
+
+The default look uses Tailwind v4 CSS variables. You can change the theme three ways, from
+broadest to narrowest.
+
+1. Edit the OKLch CSS variables in your project's `app.css`. This affects every
+   shadcn-svelte component, not just the builder.
+2. Pass `controlClassnames` with the parts you want to override. Each key maps to one
+   piece of the UI.
+3. Write CSS that targets `data-rqb-element` attributes. Every rendered node has one.
+   This works without classes.
+
+Same query, two different visual treatments.
+
+<Theming />
+
+<div class="muted small">
+
+The variant uses only `controlClassnames` and a few scoped CSS rules that target the
+`data-rqb-element` attributes. No fork. No custom components.
+
+</div>
+
+</section>
+
+<section id="ic">
+
+## Inline combinators
+
+By default each group has one combinator that joins all of its rules. Set
+`independentCombinators` to switch to a flat layout where the user picks AND or OR between
+every rule.
+
+<InlineCombinators />
+
+</section>
+
+<section id="lock">
+
+## Lock and mute
+
+Locked rules cannot be edited. They show as dimmed and the form controls become read only.
+Muted rules stay in the JSON tree but the format functions skip them, so they do not appear
+in your SQL or MongoDB output. The two are independent and can be toggled separately.
+
+<LockMute />
+
+</section>
+
+<section id="validation">
+
+## Validation
+
+Pass a function to `validator`. It receives the current query and returns a map of rule id
+to validity. Anything you mark invalid gets the class `queryBuilder-invalid`. You add
+styling by mapping that class to whatever you want through `controlClassnames`.
+
+<Validation />
+
+```ts
+const validator: QueryValidator = (q) => {
+  const map: ValidationMap = {};
+  walk(q, (node) => {
+    if (node.value === '' || node.value == null) {
+      map[node.id] = { valid: false, reasons: ['empty'] };
+    }
+  });
+  return map;
+};
+```
+
+</section>
+
+<section id="sources">
+
+## Compare to a field instead of a value
+
+Add `valueSources: ['value', 'field']` to a field definition and the builder adds a small
+selector that lets the user choose between typing a literal and picking another field. The
+first rule below compares two date fields directly.
+
+<ValueSources />
+
+</section>
+
+<section id="match">
+
+## Array match modes
+
+When a field holds a list (a column of phone numbers, tags, or anything similar) you often
+want to ask questions like "at least two of them contain 555". Set `matchModes: true` on
+the field and the builder shows a small selector with all six modes: all, some, none, at
+least, at most, and exactly. The numeric ones get a threshold input.
+
+<Match />
+
+</section>
+
+<section id="between">
+
+## Between and lists
+
+The `between` and `notBetween` operators show two inputs side by side. The `in` and
+`notIn` operators take a comma separated list of values. Both work without configuration
+and feed the format functions correctly.
+
+<Between />
+
+</section>
+
+<section id="dnd">
+
+## Drag and drop
+
+Set `enableDragAndDrop` to let users reorder rules and move them between groups. Each
+group's body becomes a drop zone and shares a type with the others, so rules can move from
+one group to another.
+
+<Dnd />
+
+<div class="muted small">
+
+If you prefer, import the wrapper component instead:
+`import { QueryBuilderDnD } from 'svelte-query-builder/dnd'`. It is the same builder with
+the flag set for you.
+
+</div>
+
+</section>
+
+<section id="async">
+
+## Async option lists
+
+When the list of options for a field comes from a server, use `createAsyncOptionList`. It
+exposes status, data, and error as reactive properties, and it cancels in flight requests
+automatically when you call `load` again.
+
+```ts
+import { createAsyncOptionList } from 'svelte-query-builder';
+
+const list = createAsyncOptionList({
+  fetcher: async (input, signal) => {
+    const r = await fetch(`/api/options?q=${input}`, { signal });
+    return r.json();
+  },
+});
+
+$effect(() => list.load(currentField));
+
+// list.status — 'idle' | 'loading' | 'success' | 'error'
+// list.data   — array of options or null
+// list.error  — Error or null
+```
+
+</section>
+
+<section id="headless">
+
+## Bring your own UI
+
+The default look depends on shadcn-svelte. If you want to ship without that, swap every
+subcomponent through the `controls` prop. The example below uses plain HTML `<select>`,
+`<input>`, and `<button>` elements. No shadcn, no bits-ui, no Tailwind utility classes.
+
+<Headless />
+
+For the rare case where you also want to ditch the `QueryBuilder` orchestrator and write
+your own root, import from the `/headless` entry point. You get the state factory and
+context helpers with no UI components attached.
+
+```ts
+import {
+  createQueryBuilderState,
+  setQueryBuilderContext,
+} from 'svelte-query-builder/headless';
+
+const state = createQueryBuilderState({
+  getQuery: () => query,
+  defaultQuery: { combinator: 'and', rules: [] },
+  onQueryChange: (q) => { query = q; },
+});
+
+setQueryBuilderContext({
+  get state()  { return state; },
+  get schema() { return mySchema; },
+});
+```
+
+</section>
+
+<section id="subpaths">
+
+## Subpath imports
+
+The main entry point exposes everything the typical app needs. For smaller bundles, the
+format and parser helpers are also available as separate entry points.
+
+| Path | What it exports |
+| --- | --- |
+| `svelte-query-builder` | QueryBuilder, every default subcomponent, types, defaults, format and transform helpers. |
+| `svelte-query-builder/headless` | Types, defaults, state factory, and context helpers. No UI. |
+| `svelte-query-builder/dnd` | QueryBuilderDnD wrapper component. |
+| `svelte-query-builder/formatQuery` | Just the formatQuery function. |
+| `svelte-query-builder/transformQuery` | Just the transformQuery function. |
+| `svelte-query-builder/parseSQL` | Parse a SQL WHERE clause back into a query. |
+| `svelte-query-builder/parseMongoDB` | Parse a MongoDB query object. |
+| `svelte-query-builder/parseCEL` | Parse a Common Expression Language string. |
+| `svelte-query-builder/parseSpEL` | Parse a Spring Expression Language string. |
+| `svelte-query-builder/parseJSONata` | Parse a JSONata expression. Needs the optional jsonata package. |
+| `svelte-query-builder/parseJsonLogic` | Parse a JSON Logic value. Needs the optional json-logic-js package. |
+
+</section>
+
+<section id="pitfalls">
+
+## Things to watch out for
+
+**Use `$state` for the query variable.**
+The builder needs reactive access to the query. Plain variables will not work with
+`bind:query`.
+
+**The default SQL output is for display.**
+When running queries against a real database, always use `'parameterized'` or
+`'parameterized_named'`. The plain `'sql'` format does not escape values for arbitrary
+injection paths.
+
+**There is no DuckDB preset.**
+Use the `sqlite` preset (closest dialect) or, better, the `parameterized` format which
+avoids most dialect specific issues.
+
+**Inline combinator queries have a different shape.**
+When you set `independentCombinators`, your default query must use `RuleGroupTypeIC`: no
+top level `combinator`, and the `rules` array alternates between rule objects and
+combinator strings.
+
+**Cloning a rule inserts it right after the original.**
+Calling `state.cloneNode([0])` places the copy at index `1` in the same parent. This
+keeps the visual order predictable.
+
+</section>
+
+<footer class="docs-footer">
+
+This library wraps `@react-querybuilder/core`, which does the heavy lifting for format
+conversion and parsing. The default look uses shadcn-svelte and bits-ui on top of Tailwind
+v4. Both libraries are MIT licensed.
+
+</footer>
