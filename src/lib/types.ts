@@ -7,14 +7,21 @@ import type {
 	FullField,
 	FullOption,
 	FullOptionList,
+	GetOptionIdentifierType,
 	InputType,
+	MatchMode,
 	Operator,
 	Option,
 	Path,
+	QueryValidator,
 	RuleGroupType,
 	RuleGroupTypeAny,
 	RuleType,
+	ValidationMap,
+	ValidationResult,
 	ValueEditorType,
+	ValueSourceFlexibleOptions,
+	ValueSources,
 } from '@react-querybuilder/core';
 
 export type {
@@ -39,13 +46,17 @@ export type {
 	Option,
 	OptionList,
 	Path,
+	QueryValidator,
 	RuleGroupType,
 	RuleGroupTypeAny,
 	RuleGroupTypeIC,
 	RuleType,
+	RuleValidator,
 	ValidationMap,
 	ValidationResult,
 	ValueEditorType,
+	ValueSourceFlexibleOptions,
+	ValueSourceFullOptions,
 	ValueSources,
 } from '@react-querybuilder/core';
 
@@ -65,16 +76,32 @@ export interface Schema<F extends FullField = FullField> {
 	getValueEditorType: (field: string, operator: string) => ValueEditorType;
 	getInputType: (field: string, operator: string) => InputType | null;
 	getValues: (field: string, operator: string) => FullOptionList<Option>;
+	getValueSources: (field: string, operator: string) => FullOptionList<FullOption>;
+	getMatchModes: (field: string) => FullOptionList<FullOption<MatchMode>> | null;
+	getRuleClassname: (rule: RuleType) => string | string[] | undefined;
+	getRuleGroupClassname: (group: RuleGroupTypeAny) => string | string[] | undefined;
 	classnames: Classnames;
 	translations: Translations;
 	controls: ResolvedControls;
+	validationMap: ValidationMap;
+	accessibleDescriptionGenerator?: AccessibleDescriptionGenerator;
 	showCombinatorsBetweenRules: boolean;
 	showNotToggle: boolean;
 	showCloneButtons: boolean;
+	showShiftActions: boolean;
+	showLockButtons: boolean;
+	showMuteButtons: boolean;
 	independentCombinators: boolean;
+	listsAsArrays: boolean;
+	enableDragAndDrop: boolean;
 }
 
-// ---- Component prop shapes (default + custom override targets) ----
+export type AccessibleDescriptionGenerator = (input: {
+	path: Path;
+	qbId: string;
+}) => string;
+
+// ---- Component prop shapes ----
 
 export interface CommonSubcomponentProps {
 	path: Path;
@@ -121,11 +148,39 @@ export interface ValueEditorProps extends CommonSubcomponentProps {
 	className?: import('@react-querybuilder/core').Classname;
 	title?: string;
 	rule: RuleType;
+	listsAsArrays?: boolean;
 	onChange: (value: unknown) => void;
 }
 
 export interface InlineCombinatorProps extends ValueSelectorProps<FullOption> {
 	rules: (RuleType | RuleGroupTypeAny | string)[];
+}
+
+export interface ShiftActionsProps extends CommonSubcomponentProps {
+	className?: import('@react-querybuilder/core').Classname;
+	titles?: { shiftUp?: string; shiftDown?: string };
+	labels?: { shiftUp?: string; shiftDown?: string };
+	ruleOrGroup?: RuleType | RuleGroupTypeAny;
+	shiftUpDisabled?: boolean;
+	shiftDownDisabled?: boolean;
+	shiftUp: () => void;
+	shiftDown: () => void;
+}
+
+export interface MatchModeEditorProps extends CommonSubcomponentProps {
+	options: FullOptionList<FullOption<MatchMode>>;
+	matchMode?: MatchMode;
+	matchThreshold?: number;
+	className?: import('@react-querybuilder/core').Classname;
+	title?: string;
+	onChangeMode: (next: MatchMode) => void;
+	onChangeThreshold: (next: number) => void;
+}
+
+export interface DragHandleProps extends CommonSubcomponentProps {
+	className?: import('@react-querybuilder/core').Classname;
+	title?: string;
+	label?: string;
 }
 
 export interface RuleProps {
@@ -153,7 +208,11 @@ export interface Controls {
 	fieldSelector?: Component<ValueSelectorProps>;
 	operatorSelector?: Component<ValueSelectorProps>;
 	combinatorSelector?: Component<ValueSelectorProps>;
+	valueSourceSelector?: Component<ValueSelectorProps> | null;
 	notToggle?: Component<NotToggleProps> | null;
+	shiftActions?: Component<ShiftActionsProps> | null;
+	dragHandle?: Component<DragHandleProps>;
+	matchModeEditor?: Component<MatchModeEditorProps>;
 	inlineCombinator?: Component<InlineCombinatorProps>;
 	rule?: Component<RuleProps>;
 	ruleGroup?: Component<RuleGroupProps>;
@@ -163,12 +222,12 @@ export interface Controls {
 	removeGroupAction?: Component<ActionProps> | null;
 	cloneRuleAction?: Component<ActionProps> | null;
 	cloneGroupAction?: Component<ActionProps> | null;
+	lockRuleAction?: Component<ActionProps> | null;
+	lockGroupAction?: Component<ActionProps> | null;
+	muteRuleAction?: Component<ActionProps> | null;
+	muteGroupAction?: Component<ActionProps> | null;
 }
 
-/**
- * Schema.controls — every slot resolved (defaults applied), with `null`
- * preserved so consumers can short-circuit rendering hidden controls.
- */
 export type ResolvedControls = {
 	[K in keyof Controls]-?: Controls[K] extends infer T | null
 		? T | null
@@ -176,9 +235,8 @@ export type ResolvedControls = {
 };
 
 export interface QueryBuilderProps<RG extends RuleGroupTypeAny = RuleGroupType> {
-	// Controlled
+	// Controlled / uncontrolled
 	query?: RG;
-	// Uncontrolled
 	defaultQuery?: RG;
 	onQueryChange?: (query: RG) => void;
 
@@ -190,17 +248,36 @@ export interface QueryBuilderProps<RG extends RuleGroupTypeAny = RuleGroupType> 
 	getValueEditorType?: (field: string, operator: string) => ValueEditorType;
 	getInputType?: (field: string, operator: string) => InputType | null;
 	getValues?: (field: string, operator: string) => Option[];
+	getValueSources?: (
+		field: string,
+		operator: string,
+		misc: { fieldData: FullField },
+	) => ValueSources | ValueSourceFlexibleOptions;
 	getDefaultField?: string | ((fields: Field[]) => string);
 	getDefaultOperator?: string | ((field: string) => string);
 	getDefaultValue?: (rule: RuleType) => unknown;
+	getRuleClassname?: (rule: RuleType) => string | string[] | undefined;
+	getRuleGroupClassname?: (group: RuleGroupTypeAny) => string | string[] | undefined;
+	accessibleDescriptionGenerator?: AccessibleDescriptionGenerator;
 
 	// Behavior flags
 	showCombinatorsBetweenRules?: boolean;
 	showNotToggle?: boolean;
 	showCloneButtons?: boolean;
+	showShiftActions?: boolean;
+	showLockButtons?: boolean;
+	showMuteButtons?: boolean;
 	resetOnFieldChange?: boolean;
 	resetOnOperatorChange?: boolean;
 	independentCombinators?: boolean;
+	listsAsArrays?: boolean;
+	enableDragAndDrop?: boolean;
+
+	// Lock / mute (boolean = whole tree, Path[] = specific paths)
+	disabled?: boolean | Path[];
+
+	// Validation
+	validator?: QueryValidator;
 
 	// Theming
 	controlClassnames?: Partial<Classnames>;
@@ -213,10 +290,10 @@ export interface QueryBuilderProps<RG extends RuleGroupTypeAny = RuleGroupType> 
 	// Layout snippets
 	header?: Snippet<[{ schema: Schema }]>;
 	footer?: Snippet<[{ schema: Schema; query: RG }]>;
+	ruleGroupHeader?: Snippet<[{ group: RuleGroupTypeAny; path: Path; schema: Schema }]>;
+	ruleGroupBody?: Snippet<[{ group: RuleGroupTypeAny; path: Path; schema: Schema }]>;
+	ruleWrapper?: Snippet<[{ rule: RuleType; path: Path; schema: Schema; rule_render: Snippet }]>;
 
-	// Identity (auto-generated when omitted; reserved for future cross-builder DnD)
 	qbId?: string;
-
-	// Container element
 	class?: string;
 }
